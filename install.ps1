@@ -14,6 +14,41 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $BASE = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# ── 0. 自動更新（從 GitHub 抓最新版腳本）────────────────────────────────────────
+$REPO_RAW = "https://raw.githubusercontent.com/jaile06/pdftomd/master"
+$UPDATE_FILES = @("install.ps1","convert_mineru.py","convert_docling.py","使用說明.txt")
+
+Write-Host "==> 檢查更新..." -ForegroundColor Cyan
+try {
+    foreach ($f in $UPDATE_FILES) {
+        $url  = "$REPO_RAW/$([Uri]::EscapeUriString($f))"
+        $dest = Join-Path $BASE $f
+        $tmp  = "$dest.tmp"
+        Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -TimeoutSec 10
+        # 只有內容不同才覆寫（避免重新執行自己造成 BOM 遺失）
+        $oldHash = if (Test-Path $dest) { (Get-FileHash $dest -Algorithm MD5).Hash } else { "" }
+        $newHash = (Get-FileHash $tmp  -Algorithm MD5).Hash
+        if ($oldHash -ne $newHash) {
+            Move-Item $tmp $dest -Force
+            Write-Host "    [更新] $f" -ForegroundColor Yellow
+        } else {
+            Remove-Item $tmp -Force
+        }
+    }
+    # install.ps1 本身若被更新，重新啟動新版繼續執行
+    $selfHash = (Get-FileHash ($MyInvocation.MyCommand.Path) -Algorithm MD5).Hash
+    $newSelf  = Join-Path $BASE "install.ps1"
+    $newHash  = (Get-FileHash $newSelf -Algorithm MD5).Hash
+    if ($selfHash -ne $newHash) {
+        Write-Host "    install.ps1 已更新，重新啟動新版..." -ForegroundColor Yellow
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $newSelf
+        exit
+    }
+    Write-Host "    [OK] 已是最新版" -ForegroundColor Green
+} catch {
+    Write-Host "    [WARN] 無法連線 GitHub，略過更新檢查" -ForegroundColor Yellow
+}
 $PYTHON_MIN = [Version]"3.10"
 $PYTHON_MAX = [Version]"3.14"   # MinerU 不支援 3.14+
 $PYTHON_TARGET = "3.11"
