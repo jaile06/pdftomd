@@ -95,16 +95,30 @@ Write-Ok "使用 $ver（$PYTHON）"
 
 # ── 2. 建立虛擬環境 ───────────────────────────────────────────────────────────
 function New-Venv($name) {
-    $path = Join-Path $BASE $name
+    $path  = Join-Path $BASE $name
+    $pyExe = Join-Path $path "Scripts\python.exe"
     if (Test-Path $path) {
-        # 確認 pip 可用；若損壞則刪掉重建
-        $pyExe = Join-Path $path "Scripts\python.exe"
+        $needRebuild = $false
+        # 檢查 pip 是否可用
         & $pyExe -m pip --version 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "$name 的 pip 損壞，刪除後重建..."
+            $needRebuild = $true
+        } else {
+            # 檢查 venv 內的 Python 版本是否在支援範圍
+            $vv = & $pyExe --version 2>&1
+            if ($vv -match "Python (\d+\.\d+)") {
+                $v = [Version]$Matches[1]
+                if ($v -lt $PYTHON_MIN -or $v -ge $PYTHON_MAX) {
+                    Write-Warn "$name 使用 $v（不在支援範圍 $PYTHON_MIN~$PYTHON_MAX），刪除後重建..."
+                    $needRebuild = $true
+                }
+            }
+        }
+        if ($needRebuild) {
             Remove-Item $path -Recurse -Force
         } else {
-            Write-Ok "$name 已存在，略過建立"
+            Write-Ok "$name 已存在（$vv），略過建立"
             return $path
         }
     }
