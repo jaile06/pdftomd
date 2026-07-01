@@ -1,0 +1,16 @@
+# Claude Code 本地設定（含個人路徑，不應上傳）
+.claude/settings.local.json
+
+# Python 虛擬環境（OS 相依、體積龐大）
+.venv-*/
+
+# 輸入輸出資料（使用者自己的 PDF 與轉換結果）
+note/input/
+note/output/
+dev/input/
+dev/output/
+
+# 打包產物與自動生成的捷徑
+pdftomd_dist.zip
+run_mineru.bat
+run_docling.bat
