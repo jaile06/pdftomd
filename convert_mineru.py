@@ -123,7 +123,10 @@ def main():
         except subprocess.CalledProcessError as e:
             print(f"[FAIL] MinerU 轉換 {pdf.name} 失敗: {e}")
 
-    print(f"[DONE] 原始輸出在 {raw_dir}（確認無誤後可刪）")
+    if not KEEP_RAW and raw_dir.exists():
+        shutil.rmtree(raw_dir, ignore_errors=True)
+
+    print(f"[DONE] 結果在 {output_folder}")
 
 
 if __name__ == "__main__":
