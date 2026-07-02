@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     pdftomd 一鍵安裝腳本（適用全新 Win11，不需預先安裝任何東西）
@@ -50,7 +50,7 @@ try {
     Write-Host "    [WARN] 無法連線 GitHub，略過更新檢查" -ForegroundColor Yellow
 }
 $PYTHON_MIN = [Version]"3.10"
-$PYTHON_MAX = [Version]"3.14"   # MinerU 不支援 3.14+
+$PYTHON_MAX = [Version]"3.12"   # MinerU 對 3.12+ 支援不穩定，限 3.10~3.11
 $PYTHON_TARGET = "3.11"
 
 function Write-Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
@@ -139,6 +139,7 @@ $PY_DOCLING = Join-Path $VENV_DOCLING "Scripts\python.exe"
 Write-Step "安裝 MinerU 依賴（magic-pdf + CPU backend）..."
 Write-Host "    這可能需要 5~15 分鐘，請耐心等候..." -ForegroundColor DarkGray
 & $PY_MINERU -m pip install --upgrade pip --quiet
+if ($LASTEXITCODE -ne 0) { Write-Fail "MinerU pip 升級失敗" }
 & $PY_MINERU -m pip install "mineru[core]" --quiet
 if ($LASTEXITCODE -ne 0) { Write-Fail "MinerU 安裝失敗" }
 Write-Ok "MinerU 安裝完成"
@@ -146,6 +147,7 @@ Write-Ok "MinerU 安裝完成"
 Write-Step "安裝 Docling 依賴..."
 Write-Host "    這可能需要 5~10 分鐘，請耐心等候..." -ForegroundColor DarkGray
 & $PY_DOCLING -m pip install --upgrade pip --quiet
+if ($LASTEXITCODE -ne 0) { Write-Fail "Docling pip 升級失敗" }
 & $PY_DOCLING -m pip install docling --quiet
 if ($LASTEXITCODE -ne 0) { Write-Fail "Docling 安裝失敗" }
 Write-Ok "Docling 安裝完成"

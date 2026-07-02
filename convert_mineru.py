@@ -30,6 +30,7 @@ raw_dir = output_folder / "_mineru_raw"   # MinerU 原始輸出，處理後可�
 
 output_folder.mkdir(parents=True, exist_ok=True)
 images_folder.mkdir(parents=True, exist_ok=True)
+input_folder.mkdir(parents=True, exist_ok=True)
 
 # CPU 用 pipeline；有 GPU 想更高保真再換 vlm-engine / hybrid-engine
 # （3.4 預設為 hybrid-engine，需 GPU/VLM，CPU 必須顯式 pipeline）

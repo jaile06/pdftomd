@@ -21,6 +21,7 @@ images_folder = output_folder / "images"   # 圖片集中一個資料夾
 
 output_folder.mkdir(parents=True, exist_ok=True)
 images_folder.mkdir(parents=True, exist_ok=True)
+input_folder.mkdir(parents=True, exist_ok=True)
 
 # ── Pipeline 選項：啟用圖片抽取（放大 2x 提升清晰度） ──
 pdf_pipeline_options = PdfPipelineOptions()
