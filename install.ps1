@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     pdftomd 一鍵安裝腳本（適用全新 Win11，不需預先安裝任何東西）

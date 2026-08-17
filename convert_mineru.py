@@ -1,8 +1,8 @@
 """
-講義類 PDF → Markdown（使用 MinerU）
+講義類 PDF / Word → Markdown（使用 MinerU）
 
 用途分類：📚 講義類（教科書、備課、掃描檔、圖表/公式密集）走 MinerU。
-輸入：note/input/*.pdf
+輸入：note/input/*.pdf  或  note/input/*.docx
 輸出：note/output/{stem}.md  + 圖片集中於 note/output/images/
 之後把 md + images 依 [[MinerU PDF轉換工作流]] 步驟丟進 Notes/Clippings/ 走 ingest。
 
@@ -107,22 +107,67 @@ def flatten(stem: str):
             shutil.rmtree(doc_raw, ignore_errors=True)
 
 
+# ── 舊版 Word (.doc) 轉換為新版 (.docx) ──
+# 透過 PowerShell 呼叫本地安裝的 MS Word COM 物件進行轉檔，不需額外安裝 pywin32 等 Python 套件。
+def _convert_doc_to_docx(doc_path: Path) -> Path:
+    docx_path = doc_path.with_suffix(".docx")
+    if docx_path.exists():
+        return docx_path
+    
+    ps_cmd = f"""
+    $word = New-Object -ComObject Word.Application
+    $word.Visible = $false
+    $doc = $word.Documents.Open('{doc_path.resolve()}')
+    $doc.SaveAs2('{docx_path.resolve()}', 16)
+    $doc.Close()
+    $word.Quit()
+    """
+    try:
+        print(f"[DOC] 正在將舊版 Word 檔轉換為 docx: {doc_path.name}")
+        subprocess.run(["powershell", "-Command", ps_cmd], check=True, capture_output=True)
+        return docx_path
+    except Exception as e:
+        print(f"[WARN] 無法自動將 {doc_path.name} 轉換為 docx，請嘗試手動轉存。錯誤: {e}")
+        return doc_path
+
+
 def main():
     if not MINERU:
         sys.exit("[FAIL] 找不到 mineru 執行檔。先建 .venv-mineru 並 pip install 'mineru[core]'。")
 
-    pdfs = sorted(p for p in input_folder.iterdir() if p.suffix.lower() == ".pdf")
+    # ── 同時接受 PDF, DOCX 與舊版 DOC ──
+    SUPPORTED_EXTS = {".pdf", ".docx", ".doc"}
+    pdfs = sorted(p for p in input_folder.iterdir() if p.suffix.lower() in SUPPORTED_EXTS)
     if not pdfs:
-        print(f"[INFO] {input_folder} 內沒有 PDF。")
+        print(f"[INFO] {input_folder} 內沒有 PDF/Word 檔案。")
         return
 
     for pdf in pdfs:
+        temp_docx = None
+        # 核心邏輯：如果是舊版 .doc，呼叫 PowerShell 轉為 .docx 後再交給 MinerU 處理
+        if pdf.suffix.lower() == ".doc":
+            actual_file = _convert_doc_to_docx(pdf)
+            if actual_file != pdf:
+                temp_docx = actual_file
+        else:
+            actual_file = pdf
+
+        if actual_file.suffix.lower() != ".docx" and actual_file.suffix.lower() != ".pdf":
+            continue
+
         print(f"處理中: {pdf.name}")
         try:
-            run_mineru(pdf)
+            run_mineru(actual_file)
             flatten(pdf.stem)
         except subprocess.CalledProcessError as e:
             print(f"[FAIL] MinerU 轉換 {pdf.name} 失敗: {e}")
+        finally:
+            # 轉檔完成後，自動刪除臨時產生的 docx 檔案，保持資料夾乾淨
+            if temp_docx and temp_docx.exists():
+                try:
+                    temp_docx.unlink()
+                except Exception:
+                    pass
 
     if not KEEP_RAW and raw_dir.exists():
         shutil.rmtree(raw_dir, ignore_errors=True)
