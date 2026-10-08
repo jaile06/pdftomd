@@ -32,9 +32,17 @@ output_folder.mkdir(parents=True, exist_ok=True)
 images_folder.mkdir(parents=True, exist_ok=True)
 input_folder.mkdir(parents=True, exist_ok=True)
 
-# CPU 用 pipeline；有 GPU 想更高保真再換 vlm-engine / hybrid-engine
-# （3.4 預設為 hybrid-engine，需 GPU/VLM，CPU 必須顯式 pipeline）
-BACKEND = "pipeline"
+def _pick_backend() -> str:
+    """有 CUDA 用 hybrid-engine（高保真，需 VLM 模型），否則 pipeline。
+    3.4 預設為 hybrid-engine，CPU 必須顯式 pipeline，否則走 VLM 而失敗或極慢。"""
+    try:
+        import torch
+        return "hybrid-engine" if torch.cuda.is_available() else "pipeline"
+    except ImportError:
+        return "pipeline"
+
+
+BACKEND = _pick_backend()
 IMG_EXTS = (".png", ".jpg", ".jpeg")
 # 攤平成功後是否保留 MinerU 原始輸出（含每檔 ~245MB 的 _layout/_origin/_span.pdf 除錯檔）
 KEEP_RAW = False
@@ -134,6 +142,7 @@ def _convert_doc_to_docx(doc_path: Path) -> Path:
 def main():
     if not MINERU:
         sys.exit("[FAIL] 找不到 mineru 執行檔。先建 .venv-mineru 並 pip install 'mineru[core]'。")
+    print(f"[INFO] 後端：{BACKEND}（{'GPU' if BACKEND != 'pipeline' else 'CPU'}）")
 
     # ── 同時接受 PDF, DOCX 與舊版 DOC ──
     SUPPORTED_EXTS = {".pdf", ".docx", ".doc"}

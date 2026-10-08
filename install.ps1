@@ -50,7 +50,7 @@ try {
     Write-Host "    [WARN] 無法連線 GitHub，略過更新檢查" -ForegroundColor Yellow
 }
 $PYTHON_MIN = [Version]"3.10"
-$PYTHON_MAX = [Version]"3.12"   # MinerU 對 3.12+ 支援不穩定，限 3.10~3.11
+$PYTHON_MAX = [Version]"3.13"   # 3.12 已實測可用（2026-10，MinerU 3.4.5）；3.13+ 未驗證
 $PYTHON_TARGET = "3.11"
 
 function Write-Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
@@ -136,7 +136,7 @@ $PY_MINERU  = Join-Path $VENV_MINERU  "Scripts\python.exe"
 $PY_DOCLING = Join-Path $VENV_DOCLING "Scripts\python.exe"
 
 # ── 3. pip 安裝依賴 ───────────────────────────────────────────────────────────
-Write-Step "安裝 MinerU 依賴（magic-pdf + CPU backend）..."
+Write-Step "安裝 MinerU 依賴..."
 Write-Host "    這可能需要 5~15 分鐘，請耐心等候..." -ForegroundColor DarkGray
 & $PY_MINERU -m pip install --upgrade pip --quiet
 if ($LASTEXITCODE -ne 0) { Write-Fail "MinerU pip 升級失敗" }
@@ -144,11 +144,43 @@ if ($LASTEXITCODE -ne 0) { Write-Fail "MinerU pip 升級失敗" }
 if ($LASTEXITCODE -ne 0) { Write-Fail "MinerU 安裝失敗" }
 Write-Ok "MinerU 安裝完成"
 
+# ── 3b. GPU 加速（選用）：偵測到 NVIDIA 顯示卡才詢問；任何一步失敗都退回 CPU 版 ──
+# PyPI 上的 Windows torch 是 CPU 版；GPU 版改從 PyTorch 官方 cu130 套件源裝同版號
+$USE_GPU = $false
+$gpuName = $null
+if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+    $gpuName = & nvidia-smi --query-gpu=name --format=csv,noheader 2>$null | Select-Object -First 1
+}
+if ($gpuName) {
+    $ans = Read-Host "    偵測到 NVIDIA 顯示卡（$gpuName），要安裝 GPU 加速版嗎？(Y/n)"
+    if ($ans -notmatch '^[nN]') {
+        Write-Step "安裝 GPU 版 PyTorch（CUDA 13，約 3GB）..."
+        $vers = (& $PY_MINERU -c "import torch, torchvision; print(torch.__version__.split('+')[0], torchvision.__version__.split('+')[0])").Trim() -split ' '
+        $tv = $vers[0]; $vv = $vers[1]
+        & $PY_MINERU -m pip install --force-reinstall --no-deps "torch==$tv+cu130" "torchvision==$vv+cu130" --index-url https://download.pytorch.org/whl/cu130 --quiet
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "GPU 版 PyTorch $tv 安裝失敗（套件源可能沒有這個版本），維持 CPU 版。"
+        } else {
+            $ok = (& $PY_MINERU -c "import torch; print(torch.cuda.is_available())").Trim()
+            if ($ok -eq "True") {
+                $USE_GPU = $true
+                Write-Ok "GPU 加速可用"
+            } else {
+                Write-Warn "GPU 版裝好了但抓不到 CUDA（顯示卡驅動可能太舊，需支援 CUDA 13），退回 CPU 版..."
+                & $PY_MINERU -m pip install --force-reinstall --no-deps "torch==$tv" "torchvision==$vv" --quiet
+                if ($LASTEXITCODE -ne 0) { Write-Fail "退回 CPU 版 PyTorch 失敗，請重新執行安裝。" }
+                Write-Ok "已退回 CPU 版"
+            }
+        }
+    }
+}
+if (-not $USE_GPU) { Write-Ok "使用 CPU 模式（pipeline）" }
+
 Write-Step "安裝 Docling 依賴..."
 Write-Host "    這可能需要 5~10 分鐘，請耐心等候..." -ForegroundColor DarkGray
 & $PY_DOCLING -m pip install --upgrade pip --quiet
 if ($LASTEXITCODE -ne 0) { Write-Fail "Docling pip 升級失敗" }
-& $PY_DOCLING -m pip install docling --quiet
+& $PY_DOCLING -m pip install docling onnxruntime --quiet
 if ($LASTEXITCODE -ne 0) { Write-Fail "Docling 安裝失敗" }
 Write-Ok "Docling 安裝完成"
 
@@ -158,12 +190,16 @@ Write-Host "    模型會快取到 ~/.cache/magic-pdf/，之後不再重複下�
 
 $MINERU_MODELS = Join-Path $VENV_MINERU "Scripts\mineru-models-download.exe"
 if (Test-Path $MINERU_MODELS) {
-    & $MINERU_MODELS -s huggingface -m pipeline
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warn "模型下載失敗（可能是網路問題）。稍後可手動執行："
-        Write-Warn "  $MINERU_MODELS -s huggingface"
-    } else {
-        Write-Ok "MinerU 模型下載完成"
+    # CPU 只需 pipeline 模型；GPU 會用 hybrid-engine，另需 VLM 模型（約 2~3GB）
+    $modelTypes = if ($USE_GPU) { @("pipeline", "vlm") } else { @("pipeline") }
+    foreach ($mt in $modelTypes) {
+        & $MINERU_MODELS -s huggingface -m $mt
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "$mt 模型下載失敗（可能是網路問題）。稍後可手動執行："
+            Write-Warn "  $MINERU_MODELS -s huggingface -m $mt"
+        } else {
+            Write-Ok "MinerU $mt 模型下載完成"
+        }
     }
 } else {
     Write-Warn "找不到 mineru-models-download，模型將在首次執行時自動下載。"

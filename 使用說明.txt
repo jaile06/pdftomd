@@ -10,6 +10,9 @@
    - 自動配置 Python 3.11 環境
    - 安裝 Python 套件：5~15 分鐘
    - 下載 AI 模型：10~20 分鐘（約 1~2 GB）
+   - 有 NVIDIA 顯示卡時會詢問「要安裝 GPU 加速版嗎？」
+     選 Y 會多下載約 3GB 的 GPU 版 PyTorch 與 2~3GB 的 VLM 模型，轉換品質更好；
+     驅動太舊或安裝失敗會自動退回 CPU 版，不影響使用
 5. 看到「安裝完成！」即可開始使用
 
   ⚠️ 安裝只需做一次，之後直接雙擊 run_mineru.bat 或 run_docling.bat 即可。
@@ -47,6 +50,8 @@ A：請確認是雙擊 install.bat 執行，而非直接開啟 install.ps1。
 
 Q：轉換速度很慢？
 A：首次轉換需載入 AI 模型，稍慢屬正常。後續轉換會快很多。
+   執行 run_mineru.bat 時會顯示「後端：hybrid-engine（GPU）」或「pipeline（CPU）」；
+   有 NVIDIA 顯示卡卻顯示 CPU，可重新執行 install.bat 並在詢問時選 Y。
 
 Q：可以一次放多個 PDF 嗎？
 A：可以，直接放多個 PDF 進 input 資料夾，會依序全部轉換。
