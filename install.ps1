@@ -15,39 +15,51 @@ $ErrorActionPreference = "Stop"
 
 $BASE = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# ── 0. 自動更新（從 GitHub 抓最新版腳本）────────────────────────────────────────
+# ── 0. 檢查更新（只比對；列出差異並經使用者同意才覆寫，舊檔留 .bak）─────────────
 $REPO_RAW = "https://raw.githubusercontent.com/jaile06/pdftomd/master"
 $UPDATE_FILES = @("install.ps1","convert_mineru.py","convert_docling.py","使用說明.txt")
 
+# 比對時忽略 BOM 與換行差異，避免 git 換行轉換造成假更新
+function Get-NormText($path) { [IO.File]::ReadAllText($path).Replace("`r`n", "`n") }
+
 Write-Host "==> 檢查更新..." -ForegroundColor Cyan
+$tmpDir = Join-Path $env:TEMP ("pdftomd_update_" + [Guid]::NewGuid().ToString("N"))
+$selfUpdated = $false
 try {
+    New-Item -ItemType Directory $tmpDir | Out-Null
+    $changed = @()
     foreach ($f in $UPDATE_FILES) {
-        $url  = "$REPO_RAW/$([Uri]::EscapeUriString($f))"
+        $tmp  = Join-Path $tmpDir $f
         $dest = Join-Path $BASE $f
-        $tmp  = "$dest.tmp"
-        Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -TimeoutSec 10
-        # 只有內容不同才覆寫（避免重新執行自己造成 BOM 遺失）
-        $oldHash = if (Test-Path $dest) { (Get-FileHash $dest -Algorithm MD5).Hash } else { "" }
-        $newHash = (Get-FileHash $tmp  -Algorithm MD5).Hash
-        if ($oldHash -ne $newHash) {
-            Move-Item $tmp $dest -Force
-            Write-Host "    [更新] $f" -ForegroundColor Yellow
+        Invoke-WebRequest -Uri "$REPO_RAW/$([Uri]::EscapeUriString($f))" -OutFile $tmp -UseBasicParsing -TimeoutSec 10
+        if (-not (Test-Path $dest) -or (Get-NormText $dest) -cne (Get-NormText $tmp)) { $changed += $f }
+    }
+    if ($changed.Count -eq 0) {
+        Write-Host "    [OK] 已是最新版" -ForegroundColor Green
+    } else {
+        Write-Host "    以下檔案與 GitHub 不同（也可能是你自己改過）：" -ForegroundColor Yellow
+        foreach ($f in $changed) { Write-Host "      - $f" }
+        Write-Host "    新版內容在 $tmpDir，可先檢視再回答" -ForegroundColor Yellow
+        if ((Read-Host "    要用 GitHub 版本覆寫嗎？(y/N)") -match '^[Yy]$') {
+            foreach ($f in $changed) {
+                $dest = Join-Path $BASE $f
+                if (Test-Path $dest) { Copy-Item $dest "$dest.bak" -Force }
+                Copy-Item (Join-Path $tmpDir $f) $dest -Force
+                Write-Host "    [更新] $f（舊檔：$f.bak）" -ForegroundColor Yellow
+                if ($f -eq "install.ps1") { $selfUpdated = $true }
+            }
         } else {
-            Remove-Item $tmp -Force
+            Write-Host "    [略過] 沿用本機版本" -ForegroundColor Green
         }
     }
-    # install.ps1 本身若被更新，重新啟動新版繼續執行
-    $selfHash = (Get-FileHash ($MyInvocation.MyCommand.Path) -Algorithm MD5).Hash
-    $newSelf  = Join-Path $BASE "install.ps1"
-    $newHash  = (Get-FileHash $newSelf -Algorithm MD5).Hash
-    if ($selfHash -ne $newHash) {
-        Write-Host "    install.ps1 已更新，重新啟動新版..." -ForegroundColor Yellow
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $newSelf
-        exit
-    }
-    Write-Host "    [OK] 已是最新版" -ForegroundColor Green
 } catch {
-    Write-Host "    [WARN] 無法連線 GitHub，略過更新檢查" -ForegroundColor Yellow
+    Write-Host "    [WARN] 更新檢查未完成，沿用現有檔案：$($_.Exception.Message)" -ForegroundColor Yellow
+} finally {
+    Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+if ($selfUpdated) {
+    Write-Host "    install.ps1 已更新，請重新執行 install.bat" -ForegroundColor Yellow
+    exit
 }
 $PYTHON_MIN = [Version]"3.10"
 $PYTHON_MAX = [Version]"3.13"   # 3.12 已實測可用（2026-10，MinerU 3.4.5）；3.13+ 未驗證

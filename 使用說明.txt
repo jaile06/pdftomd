@@ -7,6 +7,7 @@
 2. 雙擊  install.bat（或在 install.ps1 按右鍵 → 以 PowerShell 執行）
 3. 若出現「是否要執行」或 Windows Defender 提示，選「其他資訊」→「仍要執行」
 4. 等待安裝完成（需要網路，約 15~30 分鐘）
+   - 若 GitHub 有不同版本會先詢問，按 Y 才更新（舊檔留 .bak），直接 Enter 則略過
    - 自動配置 Python 3.11 環境
    - 安裝 Python 套件：5~15 分鐘
    - 下載 AI 模型：10~20 分鐘（約 1~2 GB）
